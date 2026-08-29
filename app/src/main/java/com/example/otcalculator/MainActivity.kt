@@ -1,5 +1,5 @@
 package com.example.otcalculator
-
+ 
 import android.app.DatePickerDialog
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -28,14 +28,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
-
+ 
 private val Navy = Color(0xFF08265F)
 private val RoyalBlue = Color(0xFF123FAF)
 private val Green = Color(0xFF0A8F63)
 private val PaleBlue = Color(0xFFF3F7FF)
 private val SoftGreen = Color(0xFFF0FAF5)
 private val Orange = Color(0xFFF47C20)
-
+ 
 data class WorkEntry(
     val id: Long,
     val date: String, // yyyy-MM-dd
@@ -48,14 +48,14 @@ data class WorkEntry(
     val workAmount: Double get() = hours * rate
     val dayTotal: Double get() = workAmount + allowance
 }
-
+ 
 data class AppSettings(
     val otRate: Double = 17.64,
     val staybackRate: Double = 14.70,
     val dailyAllowance: Double = 50.0,
     val defaultSalary: Double = 2446.0
 )
-
+ 
 data class MonthlyExtras(
     val monthKey: String,
     val salary: Double = 2446.0,
@@ -64,22 +64,22 @@ data class MonthlyExtras(
     val split: Double = 0.0,
     val wpc: Double = 0.0
 )
-
+ 
 private enum class Page { HOME, ADD, SUMMARY, HISTORY, SETTINGS }
-
+ 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { OTCalculatorApp() }
     }
 }
-
+ 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OTCalculatorApp() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("ot_calculator", 0) }
-
+ 
     fun loadSettings(): AppSettings {
         return AppSettings(
             otRate = prefs.getString("otRate", "17.64")?.toDoubleOrNull() ?: 17.64,
@@ -88,7 +88,7 @@ fun OTCalculatorApp() {
             defaultSalary = prefs.getString("defaultSalary", "2446.00")?.toDoubleOrNull() ?: 2446.0
         )
     }
-
+ 
     fun saveSettings(s: AppSettings) {
         prefs.edit()
             .putString("otRate", s.otRate.toString())
@@ -97,7 +97,7 @@ fun OTCalculatorApp() {
             .putString("defaultSalary", s.defaultSalary.toString())
             .apply()
     }
-
+ 
     fun loadEntries(): List<WorkEntry> {
         val array = JSONArray(prefs.getString("entries", "[]") ?: "[]")
         val list = mutableListOf<WorkEntry>()
@@ -115,7 +115,7 @@ fun OTCalculatorApp() {
         }
         return list.sortedWith(compareByDescending<WorkEntry> { it.date }.thenByDescending { it.id })
     }
-
+ 
     fun saveEntries(list: List<WorkEntry>) {
         val array = JSONArray()
         list.forEach { e ->
@@ -131,7 +131,7 @@ fun OTCalculatorApp() {
         }
         prefs.edit().putString("entries", array.toString()).apply()
     }
-
+ 
     fun loadExtras(monthKey: String, defaultSalary: Double): MonthlyExtras {
         val root = JSONObject(prefs.getString("monthlyExtras", "{}") ?: "{}")
         val o = root.optJSONObject(monthKey)
@@ -144,7 +144,7 @@ fun OTCalculatorApp() {
             wpc = o?.optDouble("wpc", 0.0) ?: 0.0
         )
     }
-
+ 
     fun saveExtras(extras: MonthlyExtras) {
         val root = JSONObject(prefs.getString("monthlyExtras", "{}") ?: "{}")
         root.put(extras.monthKey, JSONObject().apply {
@@ -156,7 +156,7 @@ fun OTCalculatorApp() {
         })
         prefs.edit().putString("monthlyExtras", root.toString()).apply()
     }
-
+ 
     val monthFormatter = remember { SimpleDateFormat("yyyy-MM", Locale.getDefault()) }
     val monthTitleFormatter = remember { SimpleDateFormat("MMMM yyyy", Locale.getDefault()) }
     var settings by remember { mutableStateOf(loadSettings()) }
@@ -165,20 +165,20 @@ fun OTCalculatorApp() {
     var selectedMonth by remember { mutableStateOf(monthFormatter.format(Date())) }
     var addType by remember { mutableStateOf("OT") }
     var editEntry by remember { mutableStateOf<WorkEntry?>(null) }
-
+ 
     fun monthTitle(key: String): String = try {
         val d = SimpleDateFormat("yyyy-MM", Locale.getDefault()).parse(key)
         if (d != null) monthTitleFormatter.format(d) else key
     } catch (_: Exception) { key }
-
+ 
     fun filteredMonthEntries(key: String) = entries.filter { it.date.startsWith(key) }
-
+ 
     fun openAdd(type: String) {
         addType = type
         editEntry = null
         page = Page.ADD
     }
-
+ 
     BackHandler(enabled = page != Page.HOME) {
         page = when (page) {
             Page.ADD -> Page.HOME
@@ -188,7 +188,7 @@ fun OTCalculatorApp() {
             Page.HOME -> Page.HOME
         }
     }
-
+ 
     MaterialTheme(
         colorScheme = lightColorScheme(primary = Navy, secondary = Green, background = PaleBlue)
     ) {
@@ -273,7 +273,7 @@ fun OTCalculatorApp() {
         }
     }
 }
-
+ 
 @Composable
 private fun RowScope.BottomItem(selected: Boolean, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     NavigationBarItem(
@@ -290,7 +290,7 @@ private fun RowScope.BottomItem(selected: Boolean, label: String, icon: androidx
         )
     )
 }
-
+ 
 @Composable
 private fun HomeScreen(
     monthTitle: String,
@@ -306,7 +306,7 @@ private fun HomeScreen(
     val workAmount = entries.sumOf { it.workAmount }
     val allowances = entries.sumOf { it.allowance }
     val grand = extras.salary + extras.ramadan + extras.ph + extras.split + extras.wpc + workAmount + allowances
-
+ 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 18.dp, bottom = 24.dp),
@@ -373,7 +373,7 @@ private fun HomeScreen(
         }
     }
 }
-
+ 
 @Composable
 private fun Metric(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(max = 115.dp)) {
@@ -382,7 +382,7 @@ private fun Metric(label: String, value: String, color: Color) {
         Text(value, fontWeight = FontWeight.Bold, color = color, fontSize = 13.sp)
     }
 }
-
+ 
 @Composable
 private fun MenuCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Card(modifier = modifier.clickable(onClick = onClick), shape = RoundedCornerShape(14.dp)) {
@@ -393,7 +393,7 @@ private fun MenuCard(title: String, icon: androidx.compose.ui.graphics.vector.Im
         }
     }
 }
-
+ 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddEntryScreen(
@@ -413,7 +413,7 @@ private fun AddEntryScreen(
     val rate = if (type == "OT") settings.otRate else settings.staybackRate
     val workAmount = hours * rate
     val total = workAmount + settings.dailyAllowance
-
+ 
     Scaffold(
         topBar = {
             TopAppBar(
@@ -506,13 +506,13 @@ private fun AddEntryScreen(
         }
     }
 }
-
+ 
 @Composable
 private fun ChoiceButton(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     if (selected) Button(onClick = onClick, modifier = modifier, colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue)) { Text(label) }
     else OutlinedButton(onClick = onClick, modifier = modifier) { Text(label) }
 }
-
+ 
 @Composable
 private fun AmountInfo(label: String, value: String, bg: Color) {
     Card(colors = CardDefaults.cardColors(containerColor = bg), shape = RoundedCornerShape(12.dp)) {
@@ -521,7 +521,7 @@ private fun AmountInfo(label: String, value: String, bg: Color) {
         }
     }
 }
-
+ 
 @Composable
 private fun AmountLine(label: String, value: String, bold: Boolean = false, color: Color = Color.Black) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -529,7 +529,7 @@ private fun AmountLine(label: String, value: String, bold: Boolean = false, colo
         Text(value, fontWeight = FontWeight.Bold, color = color)
     }
 }
-
+ 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SummaryScreen(
@@ -550,13 +550,13 @@ private fun SummaryScreen(
     val stayAmount = stay.sumOf { it.workAmount }
     val allowance = entries.sumOf { it.allowance }
     val grand = extras.salary + extras.ramadan + extras.ph + extras.split + extras.wpc + otAmount + stayAmount + allowance
-
+ 
     if (showPayments) {
         ExtrasDialog(extras, onDismiss = { showPayments = false }) {
             onExtrasSave(it); showPayments = false
         }
     }
-
+ 
     Scaffold(topBar = {
         TopAppBar(
             title = { Text(monthTitle, color = Color.White) },
@@ -636,7 +636,7 @@ private fun SummaryScreen(
         }
     }
 }
-
+ 
 @Composable
 private fun SummaryMoneyRow(label: String, amount: Double, color: Color) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -644,7 +644,7 @@ private fun SummaryMoneyRow(label: String, amount: Double, color: Color) {
         Text("AED ${money(amount)}", fontWeight = FontWeight.Bold, color = color)
     }
 }
-
+ 
 @Composable
 private fun EntryCard(e: WorkEntry, onEdit: () -> Unit, onDelete: () -> Unit) {
     Card(shape = RoundedCornerShape(14.dp)) {
@@ -660,7 +660,7 @@ private fun EntryCard(e: WorkEntry, onEdit: () -> Unit, onDelete: () -> Unit) {
         }
     }
 }
-
+ 
 @Composable
 private fun ExtrasDialog(extras: MonthlyExtras, onDismiss: () -> Unit, onSave: (MonthlyExtras) -> Unit) {
     var salary by remember { mutableStateOf(extras.salary.toString()) }
@@ -695,7 +695,7 @@ private fun ExtrasDialog(extras: MonthlyExtras, onDismiss: () -> Unit, onSave: (
         dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } }
     )
 }
-
+ 
 @Composable
 private fun MoneyField(label: String, value: String, onChange: (String) -> Unit) {
     OutlinedTextField(
@@ -707,7 +707,7 @@ private fun MoneyField(label: String, value: String, onChange: (String) -> Unit)
         singleLine = true
     )
 }
-
+ 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HistoryScreen(
@@ -749,7 +749,7 @@ private fun HistoryScreen(
         }
     }
 }
-
+ 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(settings: AppSettings, onSave: (AppSettings) -> Unit) {
@@ -757,7 +757,7 @@ private fun SettingsScreen(settings: AppSettings, onSave: (AppSettings) -> Unit)
     var stay by remember { mutableStateOf(settings.staybackRate.toString()) }
     var allowance by remember { mutableStateOf(settings.dailyAllowance.toString()) }
     var salary by remember { mutableStateOf(settings.defaultSalary.toString()) }
-
+ 
     Scaffold(topBar = {
         TopAppBar(title = { Text("Settings", color = Color.White) }, colors = TopAppBarDefaults.topAppBarColors(containerColor = Navy))
     }) { padding ->
@@ -788,15 +788,20 @@ private fun SettingsScreen(settings: AppSettings, onSave: (AppSettings) -> Unit)
         }
     }
 }
-
+ 
 private fun money(v: Double): String = String.format(Locale.US, "%,.2f", v)
-
-private fun prettyDate(value: String): String = try {
-    val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    val output = SimpleDateFormat("dd MMM yyyy (EEE)", Locale.getDefault())
-    output.format(input.parse(value) ?: return value)
-} catch (_: Exception) { value }
-
+ 
+private fun prettyDate(value: String): String {
+    return try {
+        val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val output = SimpleDateFormat("dd MMM yyyy (EEE)", Locale.getDefault())
+        val parsedDate = input.parse(value)
+        if (parsedDate != null) output.format(parsedDate) else value
+    } catch (_: Exception) {
+        value
+    }
+}
+ 
 private fun previousMonth(key: String): String = shiftMonth(key, -1)
 private fun nextMonth(key: String): String = shiftMonth(key, 1)
 private fun shiftMonth(key: String, amount: Int): String = try {
