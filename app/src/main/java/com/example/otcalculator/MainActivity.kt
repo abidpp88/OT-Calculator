@@ -439,6 +439,26 @@ private fun AddEntryScreen(
     val rate = if (type == "OT") settings.otRate else settings.staybackRate
     val workAmount = hours * rate
     val total = workAmount + settings.dailyAllowance
+    var pendingDuplicate by remember { mutableStateOf<WorkEntry?>(null) }
+ 
+    if (pendingDuplicate != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDuplicate = null },
+            title = { Text("Duplicate Entry Warning") },
+            text = { Text("An entry already exists for $date. Save another $type entry for the same date?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val entry = pendingDuplicate
+                    pendingDuplicate = null
+                    if (entry != null) onSave(entry)
+                }) { Text("SAVE ANYWAY") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDuplicate = null }) { Text("CANCEL") }
+            }
+        )
+    }
+ 
  
     Scaffold(
         topBar = {
