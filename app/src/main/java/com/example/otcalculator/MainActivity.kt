@@ -1,7 +1,11 @@
 package com.example.otcalculator
  
 import android.app.DatePickerDialog
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
 import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -15,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,6 +33,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.roundToInt
  
 private val Navy = Color(0xFF08265F)
 private val RoyalBlue = Color(0xFF123FAF)
@@ -53,7 +59,8 @@ data class AppSettings(
     val otRate: Double = 17.64,
     val staybackRate: Double = 14.70,
     val dailyAllowance: Double = 50.0,
-    val defaultSalary: Double = 2446.0
+    val defaultSalary: Double = 2446.0,
+    val monthlyTarget: Double = 2000.0
 )
  
 data class MonthlyExtras(
@@ -85,7 +92,8 @@ fun OTCalculatorApp() {
             otRate = prefs.getString("otRate", "17.64")?.toDoubleOrNull() ?: 17.64,
             staybackRate = prefs.getString("staybackRate", "14.70")?.toDoubleOrNull() ?: 14.70,
             dailyAllowance = prefs.getString("dailyAllowance", "50.00")?.toDoubleOrNull() ?: 50.0,
-            defaultSalary = prefs.getString("defaultSalary", "2446.00")?.toDoubleOrNull() ?: 2446.0
+            defaultSalary = prefs.getString("defaultSalary", "2446.00")?.toDoubleOrNull() ?: 2446.0,
+            monthlyTarget = prefs.getString("monthlyTarget", "2000.00")?.toDoubleOrNull() ?: 2000.0
         )
     }
  
@@ -95,6 +103,7 @@ fun OTCalculatorApp() {
             .putString("staybackRate", s.staybackRate.toString())
             .putString("dailyAllowance", s.dailyAllowance.toString())
             .putString("defaultSalary", s.defaultSalary.toString())
+            .putString("monthlyTarget", s.monthlyTarget.toString())
             .apply()
     }
  
@@ -221,6 +230,7 @@ fun OTCalculatorApp() {
                         initialType = addType,
                         settings = settings,
                         editing = editEntry,
+                        existingEntries = entries,
                         onBack = { page = Page.HOME },
                         onSave = { newEntry ->
                             entries = if (editEntry == null) {
@@ -238,6 +248,7 @@ fun OTCalculatorApp() {
                         monthTitle = monthTitle(selectedMonth),
                         entries = filteredMonthEntries(selectedMonth),
                         extras = loadExtras(selectedMonth, settings.defaultSalary),
+                        monthlyTarget = settings.monthlyTarget,
                         onExtrasSave = { saveExtras(it) },
                         onMonthChange = { selectedMonth = it },
                         onEditEntry = {
@@ -258,10 +269,24 @@ fun OTCalculatorApp() {
                         onOpenMonth = {
                             selectedMonth = it
                             page = Page.SUMMARY
+                        },
+                        onEditEntry = {
+                            editEntry = it
+                            addType = it.type
+                            page = Page.ADD
+                        },
+                        onDeleteEntry = { target ->
+                            entries = entries.filterNot { it.id == target.id }
+                            saveEntries(entries)
                         }
                     )
                     Page.SETTINGS -> SettingsScreen(
                         settings = settings,
+                        entries = entries,
+                        onRestoreEntries = {
+                            entries = it.sortedWith(compareByDescending<WorkEntry> { e -> e.date }.thenByDescending { e -> e.id })
+                            saveEntries(entries)
+                        },
                         onSave = {
                             settings = it
                             saveSettings(it)
@@ -400,6 +425,7 @@ private fun AddEntryScreen(
     initialType: String,
     settings: AppSettings,
     editing: WorkEntry?,
+    existingEntries: List<WorkEntry>,
     onBack: () -> Unit,
     onSave: (WorkEntry) -> Unit
 ) {
@@ -435,23 +461,44 @@ private fun AddEntryScreen(
                 }
             }
             item {
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = {},
-                    readOnly = true,
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        val cal = Calendar.getInstance()
-                        try {
-                            val d = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(date)
-                            if (d != null) cal.time = d
-                        } catch (_: Exception) {}
-                        DatePickerDialog(context, { _, y, m, day ->
-                            date = String.format(Locale.getDefault(), "%04d-%02d-%02d", y, m + 1, day)
-                        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
-                    },
-                    label = { Text("Date") },
-                    trailingIcon = { Icon(Icons.Default.CalendarMonth, null) }
-                )
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = date,
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Date") },
+                        trailingIcon = { Icon(Icons.Default.CalendarMonth, null) }
+                    )
+ 
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable {
+                                val cal = Calendar.getInstance()
+                                try {
+                                    val d = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(date)
+                                    if (d != null) cal.time = d
+                                } catch (_: Exception) {}
+ 
+                                DatePickerDialog(
+                                    context,
+                                    { _, y, m, day ->
+                                        date = String.format(
+                                            Locale.getDefault(),
+                                            "%04d-%02d-%02d",
+                                            y,
+                                            m + 1,
+                                            day
+                                        )
+                                    },
+                                    cal.get(Calendar.YEAR),
+                                    cal.get(Calendar.MONTH),
+                                    cal.get(Calendar.DAY_OF_MONTH)
+                                ).show()
+                            }
+                    )
+                }
             }
             item {
                 OutlinedTextField(
@@ -487,7 +534,7 @@ private fun AddEntryScreen(
                 Button(
                     onClick = {
                         if (hours > 0) {
-                            onSave(WorkEntry(
+                            val newEntry = WorkEntry(
                                 id = editing?.id ?: System.currentTimeMillis(),
                                 date = date,
                                 type = type,
@@ -495,7 +542,11 @@ private fun AddEntryScreen(
                                 rate = rate,
                                 allowance = settings.dailyAllowance,
                                 notes = notes.trim()
-                            ))
+                            )
+                            val duplicate = existingEntries.any {
+                                it.date == date && it.id != editing?.id
+                            }
+                            if (duplicate) pendingDuplicate = newEntry else onSave(newEntry)
                         }
                     },
                     enabled = hours > 0,
@@ -537,6 +588,7 @@ private fun SummaryScreen(
     monthTitle: String,
     entries: List<WorkEntry>,
     extras: MonthlyExtras,
+    monthlyTarget: Double,
     onExtrasSave: (MonthlyExtras) -> Unit,
     onMonthChange: (String) -> Unit,
     onEditEntry: (WorkEntry) -> Unit,
@@ -611,6 +663,24 @@ private fun SummaryScreen(
                                 AmountLine("Total Working Days", entries.size.toString())
                             }
                         }
+                    }
+                    item {
+                        val earned = otAmount + stayAmount + allowance
+                        val progress = if (monthlyTarget > 0) (earned / monthlyTarget).coerceIn(0.0, 1.0).toFloat() else 0f
+                        Card(shape = RoundedCornerShape(16.dp)) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Monthly Target", fontWeight = FontWeight.Bold, color = Navy)
+                                Text("AED ${money(earned)} / AED ${money(monthlyTarget)}", fontWeight = FontWeight.SemiBold)
+                                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                                Text("${(progress * 100).roundToInt()}% completed", fontSize = 12.sp, color = Color.Gray)
+                            }
+                        }
+                    }
+                    item {
+                        CalendarMonthCard(monthKey = monthKey, entries = entries)
+                    }
+                    item {
+                        MonthlyPdfButton(monthTitle, entries, extras)
                     }
                     item {
                         OutlinedButton(onClick = { showPayments = true }, modifier = Modifier.fillMaxWidth()) {
@@ -715,7 +785,9 @@ private fun HistoryScreen(
     defaultSalary: Double,
     loadExtras: (String) -> MonthlyExtras,
     monthTitle: (String) -> String,
-    onOpenMonth: (String) -> Unit
+    onOpenMonth: (String) -> Unit,
+    onEditEntry: (WorkEntry) -> Unit,
+    onDeleteEntry: (WorkEntry) -> Unit
 ) {
     val months = entries.map { it.date.take(7) }.distinct().sortedDescending()
     Scaffold(topBar = {
@@ -732,16 +804,21 @@ private fun HistoryScreen(
                     val list = entries.filter { it.date.startsWith(key) }
                     val ex = loadExtras(key)
                     val total = list.sumOf { it.dayTotal } + ex.salary + ex.ramadan + ex.ph + ex.split + ex.wpc
-                    Card(Modifier.fillMaxWidth().clickable { onOpenMonth(key) }, shape = RoundedCornerShape(14.dp)) {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CalendarMonth, null, tint = RoyalBlue)
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(monthTitle(key), fontWeight = FontWeight.Bold)
-                                Text("${list.size} working days", fontSize = 12.sp, color = Color.Gray)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Card(Modifier.fillMaxWidth().clickable { onOpenMonth(key) }, shape = RoundedCornerShape(14.dp)) {
+                            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.CalendarMonth, null, tint = RoyalBlue)
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(monthTitle(key), fontWeight = FontWeight.Bold)
+                                    Text("${list.size} entries", fontSize = 12.sp, color = Color.Gray)
+                                }
+                                Text("AED ${money(total)}", fontWeight = FontWeight.Bold, color = Green)
+                                Icon(Icons.Default.ChevronRight, null)
                             }
-                            Text("AED ${money(total)}", fontWeight = FontWeight.Bold, color = Green)
-                            Icon(Icons.Default.ChevronRight, null)
+                        }
+                        list.sortedByDescending { it.date }.forEach { e ->
+                            EntryCard(e, onEdit = { onEditEntry(e) }, onDelete = { onDeleteEntry(e) })
                         }
                     }
                 }
@@ -752,25 +829,85 @@ private fun HistoryScreen(
  
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(settings: AppSettings, onSave: (AppSettings) -> Unit) {
+private fun SettingsScreen(
+    settings: AppSettings,
+    entries: List<WorkEntry>,
+    onRestoreEntries: (List<WorkEntry>) -> Unit,
+    onSave: (AppSettings) -> Unit
+) {
+    val context = LocalContext.current
     var ot by remember { mutableStateOf(settings.otRate.toString()) }
     var stay by remember { mutableStateOf(settings.staybackRate.toString()) }
     var allowance by remember { mutableStateOf(settings.dailyAllowance.toString()) }
     var salary by remember { mutableStateOf(settings.defaultSalary.toString()) }
+    var target by remember { mutableStateOf(settings.monthlyTarget.toString()) }
+ 
+    val backupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val array = JSONArray()
+                entries.forEach { e ->
+                    array.put(JSONObject().apply {
+                        put("id", e.id); put("date", e.date); put("type", e.type)
+                        put("hours", e.hours); put("rate", e.rate); put("allowance", e.allowance)
+                        put("notes", e.notes)
+                    })
+                }
+                context.contentResolver.openOutputStream(uri)?.use {
+                    it.write(array.toString(2).toByteArray())
+                }
+                Toast.makeText(context, "Backup saved", Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) {
+                Toast.makeText(context, "Backup failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+ 
+    val restoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val raw = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: "[]"
+                val array = JSONArray(raw)
+                val restored = mutableListOf<WorkEntry>()
+                for (i in 0 until array.length()) {
+                    val o = array.getJSONObject(i)
+                    restored += WorkEntry(
+                        id = o.optLong("id", System.currentTimeMillis() + i),
+                        date = o.optString("date"),
+                        type = o.optString("type", "OT"),
+                        hours = o.optDouble("hours", 0.0),
+                        rate = o.optDouble("rate", 0.0),
+                        allowance = o.optDouble("allowance", settings.dailyAllowance),
+                        notes = o.optString("notes", "")
+                    )
+                }
+                onRestoreEntries(restored)
+                Toast.makeText(context, "Backup restored", Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) {
+                Toast.makeText(context, "Invalid backup file", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
  
     Scaffold(topBar = {
         TopAppBar(title = { Text("Settings", color = Color.White) }, colors = TopAppBarDefaults.topAppBarColors(containerColor = Navy))
     }) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item { Text("Rates", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Navy) }
             item { MoneyField("OT Rate (per hour)", ot) { ot = it } }
             item { MoneyField("Stayback Rate (per hour)", stay) { stay = it } }
             item { MoneyField("Daily Allowance", allowance) { allowance = it } }
-            item { Text("Default Payment", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Navy) }
+            item { Text("Default Payment & Target", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Navy) }
             item { MoneyField("Salary", salary) { salary = it } }
+            item { MoneyField("Monthly OT / Stayback Target", target) { target = it } }
             item {
                 Button(
                     onClick = {
@@ -778,14 +915,141 @@ private fun SettingsScreen(settings: AppSettings, onSave: (AppSettings) -> Unit)
                             otRate = ot.toDoubleOrNull() ?: 17.64,
                             staybackRate = stay.toDoubleOrNull() ?: 14.70,
                             dailyAllowance = allowance.toDoubleOrNull() ?: 50.0,
-                            defaultSalary = salary.toDoubleOrNull() ?: 2446.0
+                            defaultSalary = salary.toDoubleOrNull() ?: 2446.0,
+                            monthlyTarget = target.toDoubleOrNull() ?: 2000.0
                         ))
                     },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue)
                 ) { Icon(Icons.Default.Save, null); Spacer(Modifier.width(8.dp)); Text("Save Settings") }
             }
+            item { HorizontalDivider() }
+            item { Text("Backup & Restore", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = Navy) }
+            item {
+                OutlinedButton(
+                    onClick = { backupLauncher.launch("OT_Calculator_Backup_${SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())}.json") },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Icon(Icons.Default.UploadFile, null); Spacer(Modifier.width(8.dp)); Text("Export Backup") }
+            }
+            item {
+                OutlinedButton(
+                    onClick = { restoreLauncher.launch(arrayOf("application/json", "text/plain")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Icon(Icons.Default.Restore, null); Spacer(Modifier.width(8.dp)); Text("Restore Backup") }
+            }
         }
+    }
+}
+ 
+@Composable
+private fun CalendarMonthCard(monthKey: String, entries: List<WorkEntry>) {
+    val cal = Calendar.getInstance()
+    try { cal.time = SimpleDateFormat("yyyy-MM", Locale.US).parse(monthKey) ?: Date() } catch (_: Exception) {}
+    val year = cal.get(Calendar.YEAR)
+    val month = cal.get(Calendar.MONTH)
+    cal.set(Calendar.DAY_OF_MONTH, 1)
+    val firstDay = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7
+    val days = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+    val byDay = entries.groupBy { it.date.takeLast(2).toIntOrNull() ?: -1 }
+ 
+    Card(shape = RoundedCornerShape(16.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Calendar View", fontWeight = FontWeight.Bold, color = Navy)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                listOf("M","T","W","T","F","S","S").forEach { Text(it, modifier = Modifier.weight(1f), fontSize = 11.sp, color = Color.Gray) }
+            }
+            var day = 1
+            for (week in 0 until 6) {
+                Row(Modifier.fillMaxWidth()) {
+                    for (col in 0 until 7) {
+                        val pos = week * 7 + col
+                        if (pos < firstDay || day > days) {
+                            Box(Modifier.weight(1f).height(38.dp))
+                        } else {
+                            val d = day
+                            val list = byDay[d].orEmpty()
+                            val bg = when {
+                                list.any { it.type == "OT" } && list.any { it.type == "Stayback" } -> SoftGreen
+                                list.any { it.type == "OT" } -> Color(0xFFE8F5E9)
+                                list.any { it.type == "Stayback" } -> Color(0xFFE8EEFF)
+                                else -> Color.Transparent
+                            }
+                            Box(
+                                Modifier.weight(1f).height(38.dp).padding(2.dp).background(bg, RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center
+                            ) { Text(d.toString(), fontSize = 12.sp, fontWeight = if (list.isNotEmpty()) FontWeight.Bold else FontWeight.Normal) }
+                            day++
+                        }
+                    }
+                }
+                if (day > days) break
+            }
+            Text("Highlighted days contain OT / Stayback entries.", fontSize = 11.sp, color = Color.Gray)
+        }
+    }
+}
+ 
+@Composable
+private fun MonthlyPdfButton(monthTitle: String, entries: List<WorkEntry>, extras: MonthlyExtras) {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/pdf")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val pdf = PdfDocument()
+                val paint = Paint().apply { textSize = 12f }
+                val titlePaint = Paint().apply { textSize = 20f; isFakeBoldText = true }
+                val bold = Paint().apply { textSize = 12f; isFakeBoldText = true }
+                var pageNo = 1
+                var page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNo).create())
+                var canvas = page.canvas
+                var y = 50f
+                fun newPage() {
+                    pdf.finishPage(page)
+                    pageNo++
+                    page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNo).create())
+                    canvas = page.canvas
+                    y = 50f
+                }
+                fun line(text: String, p: Paint = paint, gap: Float = 20f) {
+                    if (y > 800f) newPage()
+                    canvas.drawText(text, 40f, y, p); y += gap
+                }
+                line("OT Calculator - Monthly Report", titlePaint, 30f)
+                line(monthTitle, bold, 28f)
+                val ot = entries.filter { it.type == "OT" }
+                val stay = entries.filter { it.type == "Stayback" }
+                val allowance = entries.sumOf { it.allowance }
+                val grand = entries.sumOf { it.dayTotal } + extras.salary + extras.ramadan + extras.ph + extras.split + extras.wpc
+                line("OT Hours: ${money(ot.sumOf { it.hours })}    OT Amount: AED ${money(ot.sumOf { it.workAmount })}")
+                line("Stayback Hours: ${money(stay.sumOf { it.hours })}    Stayback Amount: AED ${money(stay.sumOf { it.workAmount })}")
+                line("Allowance: AED ${money(allowance)}")
+                line("Salary: AED ${money(extras.salary)} | Ramadan: AED ${money(extras.ramadan)} | PH: AED ${money(extras.ph)}")
+                line("Split: AED ${money(extras.split)} | WPC: AED ${money(extras.wpc)}")
+                line("Grand Total: AED ${money(grand)}", bold, 30f)
+                line("Entries", bold)
+                entries.sortedBy { it.date }.forEach {
+                    line("${prettyDate(it.date)}  ${it.type}  ${money(it.hours)} h  AED ${money(it.dayTotal)}")
+                    if (it.notes.isNotBlank()) line("  Note: ${it.notes}", paint, 18f)
+                }
+                line("Generated: ${SimpleDateFormat("dd MMM yyyy HH:mm", Locale.getDefault()).format(Date())}", paint)
+                pdf.finishPage(page)
+                context.contentResolver.openOutputStream(uri)?.use { pdf.writeTo(it) }
+                pdf.close()
+                Toast.makeText(context, "Monthly PDF saved", Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) {
+                Toast.makeText(context, "PDF creation failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    OutlinedButton(
+        onClick = { launcher.launch("OT_Report_${monthTitle.replace(" ", "_")}.pdf") },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Icon(Icons.Default.PictureAsPdf, null)
+        Spacer(Modifier.width(8.dp))
+        Text("Generate Monthly PDF")
     }
 }
  
