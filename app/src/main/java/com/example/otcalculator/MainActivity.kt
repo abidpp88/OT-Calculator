@@ -1018,51 +1018,282 @@ private fun MonthlyPdfButton(monthTitle: String, entries: List<WorkEntry>, extra
         if (uri != null) {
             try {
                 val pdf = PdfDocument()
-                val paint = Paint().apply { textSize = 12f }
-                val titlePaint = Paint().apply { textSize = 20f; isFakeBoldText = true }
-                val bold = Paint().apply { textSize = 12f; isFakeBoldText = true }
-                var pageNo = 1
-                var page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNo).create())
-                var canvas = page.canvas
-                var y = 50f
-                fun newPage() {
-                    pdf.finishPage(page)
-                    pageNo++
-                    page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNo).create())
-                    canvas = page.canvas
-                    y = 50f
+
+                val navy = android.graphics.Color.rgb(8, 38, 95)
+                val royal = android.graphics.Color.rgb(18, 63, 175)
+                val green = android.graphics.Color.rgb(10, 143, 99)
+                val orange = android.graphics.Color.rgb(244, 124, 32)
+                val lightBlue = android.graphics.Color.rgb(243, 247, 255)
+                val lightGreen = android.graphics.Color.rgb(240, 250, 245)
+                val lightOrange = android.graphics.Color.rgb(255, 247, 240)
+                val border = android.graphics.Color.rgb(210, 218, 232)
+                val darkText = android.graphics.Color.rgb(35, 43, 58)
+                val grayText = android.graphics.Color.rgb(105, 112, 125)
+                val white = android.graphics.Color.WHITE
+
+                val normal = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize = 9f
+                    color = darkText
                 }
-                fun line(text: String, p: Paint = paint, gap: Float = 20f) {
-                    if (y > 800f) newPage()
-                    canvas.drawText(text, 40f, y, p); y += gap
+                val small = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize = 7.5f
+                    color = grayText
                 }
-                line("OT Calculator - Monthly Report", titlePaint, 30f)
-                line(monthTitle, bold, 28f)
+                val bold = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize = 9f
+                    color = darkText
+                    isFakeBoldText = true
+                }
+                val title = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize = 24f
+                    color = white
+                    isFakeBoldText = true
+                }
+                val subtitle = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize = 15f
+                    color = white
+                }
+                val sectionTitle = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize = 10f
+                    color = navy
+                    isFakeBoldText = true
+                }
+                val whiteBold = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize = 8f
+                    color = white
+                    isFakeBoldText = true
+                    textAlign = Paint.Align.CENTER
+                }
+                val center = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize = 8f
+                    color = darkText
+                    textAlign = Paint.Align.CENTER
+                }
+                val centerBold = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize = 8f
+                    color = darkText
+                    isFakeBoldText = true
+                    textAlign = Paint.Align.CENTER
+                }
+                val moneyGreen = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textSize = 18f
+                    color = green
+                    isFakeBoldText = true
+                    textAlign = Paint.Align.CENTER
+                }
+
                 val ot = entries.filter { it.type == "OT" }
                 val stay = entries.filter { it.type == "Stayback" }
+                val otHours = ot.sumOf { it.hours }
+                val stayHours = stay.sumOf { it.hours }
+                val otAmount = ot.sumOf { it.workAmount }
+                val stayAmount = stay.sumOf { it.workAmount }
                 val allowance = entries.sumOf { it.allowance }
-                val grand = entries.sumOf { it.dayTotal } + extras.salary + extras.ramadan + extras.ph + extras.split + extras.wpc
-                line("OT Hours: ${money(ot.sumOf { it.hours })}    OT Amount: AED ${money(ot.sumOf { it.workAmount })}")
-                line("Stayback Hours: ${money(stay.sumOf { it.hours })}    Stayback Amount: AED ${money(stay.sumOf { it.workAmount })}")
-                line("Allowance: AED ${money(allowance)}")
-                line("Salary: AED ${money(extras.salary)} | Ramadan: AED ${money(extras.ramadan)} | PH: AED ${money(extras.ph)}")
-                line("Split: AED ${money(extras.split)} | WPC: AED ${money(extras.wpc)}")
-                line("Grand Total: AED ${money(grand)}", bold, 30f)
-                line("Entries", bold)
-                entries.sortedBy { it.date }.forEach {
-                    line("${prettyDate(it.date)}  ${it.type}  ${money(it.hours)} h  AED ${money(it.dayTotal)}")
-                    if (it.notes.isNotBlank()) line("  Note: ${it.notes}", paint, 18f)
+                val entriesTotal = entries.sumOf { it.dayTotal }
+                val grand = entriesTotal + extras.salary + extras.ramadan + extras.ph + extras.split + extras.wpc
+
+                val sortedEntries = entries.sortedBy { it.date }
+                val rowsPerPage = 14
+                val chunks = if (sortedEntries.isEmpty()) listOf(emptyList()) else sortedEntries.chunked(rowsPerPage)
+                val totalPages = chunks.size
+
+                fun rect(canvas: android.graphics.Canvas, left: Float, top: Float, right: Float, bottom: Float, color: Int, stroke: Boolean = false) {
+                    val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        this.color = color
+                        style = if (stroke) Paint.Style.STROKE else Paint.Style.FILL
+                        strokeWidth = 1f
+                    }
+                    canvas.drawRect(left, top, right, bottom, p)
                 }
-                line("Generated: ${SimpleDateFormat("dd MMM yyyy HH:mm", Locale.getDefault()).format(Date())}", paint)
-                pdf.finishPage(page)
+
+                fun text(canvas: android.graphics.Canvas, value: String, x: Float, y: Float, p: Paint) {
+                    canvas.drawText(value, x, y, p)
+                }
+
+                fun header(canvas: android.graphics.Canvas, pageNo: Int) {
+                    rect(canvas, 0f, 0f, 595f, 92f, navy)
+                    rect(canvas, 0f, 92f, 595f, 95f, green)
+                    text(canvas, "OT CALCULATOR", 32f, 42f, title)
+                    text(canvas, "Monthly Report", 32f, 68f, subtitle)
+                    val generated = SimpleDateFormat("dd MMM yyyy HH:mm", Locale.getDefault()).format(Date())
+                    val hp = Paint(small).apply { color = white; textAlign = Paint.Align.RIGHT }
+                    text(canvas, "Generated: $generated", 560f, 42f, hp)
+                    text(canvas, "Page $pageNo of $totalPages", 560f, 61f, hp)
+                }
+
+                fun section(canvas: android.graphics.Canvas, label: String, y: Float) {
+                    text(canvas, label, 32f, y, sectionTitle)
+                    rect(canvas, 32f, y + 5f, 563f, y + 6f, royal)
+                }
+
+                fun summaryCard(
+                    canvas: android.graphics.Canvas,
+                    left: Float,
+                    top: Float,
+                    right: Float,
+                    bottom: Float,
+                    bg: Int,
+                    accent: Int,
+                    heading: String,
+                    line1: String,
+                    value1: String,
+                    line2: String,
+                    value2: String
+                ) {
+                    rect(canvas, left, top, right, bottom, bg)
+                    rect(canvas, left, top, right, top + 3f, accent)
+                    val hp = Paint(bold).apply { color = accent; textAlign = Paint.Align.CENTER; textSize = 10f }
+                    val lp = Paint(small).apply { textAlign = Paint.Align.CENTER }
+                    val vp = Paint(bold).apply { color = accent; textAlign = Paint.Align.CENTER; textSize = 13f }
+                    val cx = (left + right) / 2f
+                    text(canvas, heading, cx, top + 23f, hp)
+                    text(canvas, line1, cx, top + 43f, lp)
+                    text(canvas, value1, cx, top + 60f, vp)
+                    text(canvas, line2, cx, top + 79f, lp)
+                    text(canvas, value2, cx, top + 96f, vp)
+                    rect(canvas, left, top, right, bottom, border, true)
+                }
+
+                fun footer(canvas: android.graphics.Canvas, pageNo: Int) {
+                    rect(canvas, 32f, 813f, 563f, 814f, navy)
+                    val fp = Paint(small).apply { color = navy }
+                    val fr = Paint(small).apply { color = grayText; textAlign = Paint.Align.RIGHT }
+                    text(canvas, "OT Calculator", 32f, 829f, fp)
+                    text(canvas, "System generated monthly report", 297.5f, 829f, Paint(small).apply { textAlign = Paint.Align.CENTER; color = grayText })
+                    text(canvas, "Page $pageNo of $totalPages", 563f, 829f, fr)
+                }
+
+                chunks.forEachIndexed { pageIndex, pageEntries ->
+                    val pageNo = pageIndex + 1
+                    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNo).create())
+                    val canvas = page.canvas
+                    header(canvas, pageNo)
+
+                    var y = 120f
+                    if (pageIndex == 0) {
+                        section(canvas, "REPORT PERIOD", y)
+                        y += 18f
+                        rect(canvas, 32f, y, 563f, y + 46f, lightBlue)
+                        text(canvas, "Month", 48f, y + 18f, small)
+                        text(canvas, monthTitle, 48f, y + 35f, Paint(bold).apply { color = navy })
+                        text(canvas, "Total Working Days", 225f, y + 18f, small)
+                        text(canvas, entries.size.toString(), 225f, y + 35f, Paint(bold).apply { color = navy })
+                        text(canvas, "Currency", 420f, y + 18f, small)
+                        text(canvas, "AED", 420f, y + 35f, Paint(bold).apply { color = navy })
+                        rect(canvas, 32f, y, 563f, y + 46f, border, true)
+                        y += 66f
+
+                        val gap = 10f
+                        val cardW = (531f - gap * 2f) / 3f
+                        summaryCard(canvas, 32f, y, 32f + cardW, y + 112f, lightBlue, royal,
+                            "OVERTIME (OT)", "Total Hours", "${money(otHours)} h", "Total Amount", "AED ${money(otAmount)}")
+                        summaryCard(canvas, 32f + cardW + gap, y, 32f + cardW * 2f + gap, y + 112f, lightGreen, green,
+                            "STAYBACK", "Total Hours", "${money(stayHours)} h", "Total Amount", "AED ${money(stayAmount)}")
+                        summaryCard(canvas, 32f + cardW * 2f + gap * 2f, y, 563f, y + 112f, lightOrange, orange,
+                            "DAILY ALLOWANCE", "Total Days", entries.size.toString(), "Total Amount", "AED ${money(allowance)}")
+                        y += 132f
+
+                        section(canvas, "MONTHLY EARNINGS SUMMARY", y)
+                        y += 18f
+                        val earningsTop = y
+                        val boxRight = 430f
+                        rect(canvas, 32f, earningsTop, boxRight, earningsTop + 74f, android.graphics.Color.WHITE)
+                        rect(canvas, 32f, earningsTop, boxRight, earningsTop + 74f, border, true)
+                        val labels = listOf("SALARY", "RAMADAN", "PH", "SPLIT", "WPC")
+                        val values = listOf(extras.salary, extras.ramadan, extras.ph, extras.split, extras.wpc)
+                        val cellW = (boxRight - 32f) / 5f
+                        labels.forEachIndexed { i, label ->
+                            val cx = 32f + cellW * i + cellW / 2f
+                            if (i > 0) rect(canvas, 32f + cellW * i, earningsTop, 33f + cellW * i, earningsTop + 74f, border)
+                            text(canvas, label, cx, earningsTop + 24f, Paint(small).apply { textAlign = Paint.Align.CENTER; color = navy; isFakeBoldText = true })
+                            text(canvas, money(values[i]), cx, earningsTop + 51f, Paint(bold).apply { textAlign = Paint.Align.CENTER; color = darkText; textSize = 10f })
+                        }
+                        rect(canvas, 442f, earningsTop, 563f, earningsTop + 74f, lightGreen)
+                        rect(canvas, 442f, earningsTop, 563f, earningsTop + 22f, navy)
+                        text(canvas, "GRAND TOTAL", 502.5f, earningsTop + 15f, whiteBold)
+                        text(canvas, money(grand), 502.5f, earningsTop + 50f, moneyGreen)
+                        text(canvas, "AED", 502.5f, earningsTop + 65f, Paint(bold).apply { color = green; textAlign = Paint.Align.CENTER })
+                        rect(canvas, 442f, earningsTop, 563f, earningsTop + 74f, border, true)
+                        y += 96f
+                    }
+
+                    section(canvas, if (pageIndex == 0) "DETAILED ENTRIES" else "DETAILED ENTRIES - CONTINUED", y)
+                    y += 16f
+
+                    val x = floatArrayOf(32f, 55f, 145f, 205f, 250f, 310f, 390f, 470f, 563f)
+                    val headers = listOf("#", "DATE", "TYPE", "HOURS", "RATE", "ALLOW.", "WORK AMT", "DAY TOTAL")
+                    rect(canvas, 32f, y, 563f, y + 24f, navy)
+                    for (i in headers.indices) {
+                        val cx = (x[i] + x[i + 1]) / 2f
+                        text(canvas, headers[i], cx, y + 16f, whiteBold)
+                    }
+                    y += 24f
+
+                    pageEntries.forEachIndexed { idx, e ->
+                        val rowTop = y
+                        val rowBottom = y + 27f
+                        val absoluteIndex = pageIndex * rowsPerPage + idx + 1
+                        if (absoluteIndex % 2 == 0) rect(canvas, 32f, rowTop, 563f, rowBottom, lightBlue)
+                        rect(canvas, 32f, rowTop, 563f, rowBottom, border, true)
+                        for (i in 1 until x.size - 1) rect(canvas, x[i], rowTop, x[i] + 0.5f, rowBottom, border)
+
+                        val values = listOf(
+                            absoluteIndex.toString(),
+                            prettyDate(e.date).substringBefore(" ("),
+                            e.type,
+                            money(e.hours),
+                            money(e.rate),
+                            money(e.allowance),
+                            money(e.workAmount),
+                            money(e.dayTotal)
+                        )
+                        values.forEachIndexed { i, v ->
+                            val p = if (i == 7) Paint(centerBold).apply { color = green } else center
+                            text(canvas, v, (x[i] + x[i + 1]) / 2f, rowTop + 17f, p)
+                        }
+                        y = rowBottom
+
+                        if (e.notes.isNotBlank()) {
+                            rect(canvas, 32f, y, 563f, y + 18f, android.graphics.Color.rgb(250, 250, 250))
+                            text(canvas, "Note: ${e.notes.take(90)}", 42f, y + 12f, small)
+                            y += 18f
+                        }
+                    }
+
+                    if (pageIndex == totalPages - 1) {
+                        y += 12f
+                        if (y < 690f) {
+                            section(canvas, "SUMMARY CHECK", y)
+                            y += 17f
+                            rect(canvas, 32f, y, 563f, y + 82f, android.graphics.Color.WHITE)
+                            rect(canvas, 32f, y, 563f, y + 82f, border, true)
+                            text(canvas, "OT Amount", 48f, y + 20f, normal)
+                            text(canvas, "AED ${money(otAmount)}", 200f, y + 20f, Paint(bold).apply { textAlign = Paint.Align.RIGHT })
+                            text(canvas, "Stayback Amount", 48f, y + 39f, normal)
+                            text(canvas, "AED ${money(stayAmount)}", 200f, y + 39f, Paint(bold).apply { textAlign = Paint.Align.RIGHT })
+                            text(canvas, "Daily Allowance", 48f, y + 58f, normal)
+                            text(canvas, "AED ${money(allowance)}", 200f, y + 58f, Paint(bold).apply { textAlign = Paint.Align.RIGHT })
+                            text(canvas, "Entries Total", 48f, y + 76f, bold)
+                            text(canvas, "AED ${money(entriesTotal)}", 200f, y + 76f, Paint(bold).apply { color = green; textAlign = Paint.Align.RIGHT })
+
+                            text(canvas, "Monthly Grand Total", 340f, y + 30f, Paint(bold).apply { color = navy; textAlign = Paint.Align.CENTER })
+                            text(canvas, "AED ${money(grand)}", 450f, y + 59f, Paint(moneyGreen))
+                        }
+                    }
+
+                    footer(canvas, pageNo)
+                    pdf.finishPage(page)
+                }
+
                 context.contentResolver.openOutputStream(uri)?.use { pdf.writeTo(it) }
                 pdf.close()
-                Toast.makeText(context, "Monthly PDF saved", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Professional monthly PDF saved", Toast.LENGTH_SHORT).show()
             } catch (_: Exception) {
                 Toast.makeText(context, "PDF creation failed", Toast.LENGTH_SHORT).show()
             }
         }
     }
+
     OutlinedButton(
         onClick = { launcher.launch("OT_Report_${monthTitle.replace(" ", "_")}.pdf") },
         modifier = Modifier.fillMaxWidth()
@@ -1072,7 +1303,7 @@ private fun MonthlyPdfButton(monthTitle: String, entries: List<WorkEntry>, extra
         Text("Generate Monthly PDF")
     }
 }
- 
+
 private fun money(v: Double): String = String.format(Locale.US, "%,.2f", v)
  
 private fun prettyDate(value: String): String {
